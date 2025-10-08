@@ -189,6 +189,23 @@
       pointer-events: none;
       z-index: 9999;
     }
+    /* Input field used in Hard Mode */
+    .verb-input {
+      width: 100%;
+      padding: 12px;
+      margin: 10px auto;
+      font-size: 16px;
+      display: block;
+    }
+    /* Bold styling for selected morphological category when displayed in Hard Mode */
+    .selected-value {
+      font-weight: bold;
+    }
+
+    /* When an input is both a verb-input and hidden, ensure it is not displayed */
+    .verb-input.hidden {
+      display: none !important;
+    }
     /* Responsive design */
     @media (max-width: 600px) {
       .container {
@@ -309,6 +326,13 @@
           <label><input type="radio" name="roundCount" value="25"> 25</label>
         </div>
       </fieldset>
+      <!-- Mode selection -->
+      <fieldset>
+        <legend>Mode</legend>
+        <div class="checkbox-group">
+          <label><input type="checkbox" id="hardModeToggle"> Hard Mode</label>
+        </div>
+      </fieldset>
       <button id="startPracticeBtn">Start Practice</button>
     </div>
     
@@ -321,6 +345,8 @@
       <div id="questionDisplay">
         <h2 id="verbFormDisplay"></h2>
         <div id="principalPartsDisplay"></div>
+        <!-- Input for the hard mode. Hidden by default; shown only in Hard Mode -->
+        <input type="text" id="verbInput" class="verb-input" placeholder="Type the verb form here" autocomplete="off">
       </div>
       <!-- Answer option containers in the order: Person, Number, Tense, Voice, Mood -->
       <div id="answerChoices">
@@ -1083,6 +1109,10 @@
     let allowedVoice = [];
     let allowedPerson = [];
     let allowedNumber = [];
+    // Determines whether the session is in Hard Mode (fill-in-the-blank) or Easy Mode (multiple selection)
+    let hardMode = false;
+    // Holds the principal parts of the current verb for recording purposes
+    let currentPrincipalParts = [];
     
     /***********************
      * TIMER FUNCTIONS
@@ -1168,20 +1198,57 @@
       
       currentAnswer = filteredForms[Math.floor(Math.random() * filteredForms.length)];
       answerRevealed = false;
-      
+
       currentRound++;
       updateScoreDisplay();
-      document.getElementById("verbFormDisplay").textContent = currentAnswer.form;
+
+      // Store principal parts for recording later
+      currentPrincipalParts = randomVerb;
+
+      // Update the principal parts display and clear previous feedback
       document.getElementById("principalPartsDisplay").textContent = "(" + randomVerb.join(", ") + ")";
       document.getElementById("correctAnswerDisplay").textContent = "";
-      
-      // Generate option buttons in the order: Person, Number, Tense, Voice, Mood.
-      generateOptionButtons("optionPerson", allowedPerson, currentAnswer.person);
-      generateOptionButtons("optionNumber", allowedNumber, currentAnswer.number);
-      generateOptionButtons("optionTense", allowedTense, currentAnswer.tense);
-      generateOptionButtons("optionVoice", allowedVoice, currentAnswer.voice);
-      generateOptionButtons("optionMood", allowedMood, currentAnswer.mood);
-      
+      // Reset option headers and remove previous option buttons
+      resetOptionHeaders();
+
+      const verbFormEl = document.getElementById("verbFormDisplay");
+      const inputEl = document.getElementById("verbInput");
+      if (!hardMode) {
+        // Easy Mode: show the conjugated form and hide the input field
+        if (verbFormEl) {
+          verbFormEl.style.display = "";
+          verbFormEl.textContent = currentAnswer.form;
+        }
+        if (inputEl) {
+          // Hide the input field in Easy Mode
+          inputEl.style.display = "none";
+        }
+        // Generate option buttons in the order: Person, Number, Tense, Voice, Mood
+        generateOptionButtons("optionPerson", allowedPerson, currentAnswer.person);
+        generateOptionButtons("optionNumber", allowedNumber, currentAnswer.number);
+        generateOptionButtons("optionTense", allowedTense, currentAnswer.tense);
+        generateOptionButtons("optionVoice", allowedVoice, currentAnswer.voice);
+        generateOptionButtons("optionMood", allowedMood, currentAnswer.mood);
+      } else {
+        // Hard Mode: hide the conjugated form and show the input field
+        if (verbFormEl) {
+          verbFormEl.style.display = "none";
+          verbFormEl.textContent = "";
+        }
+        if (inputEl) {
+          // Show the input field in Hard Mode
+          inputEl.style.display = "block";
+          inputEl.value = "";
+        }
+        // Display the selected morphological categories directly in the headers
+        const numberLabel = (currentAnswer.number === "s") ? "Singular" : "Plural";
+        displayFixedValue("optionPerson", currentAnswer.person);
+        displayFixedValue("optionNumber", numberLabel);
+        displayFixedValue("optionTense", currentAnswer.tense);
+        displayFixedValue("optionVoice", currentAnswer.voice);
+        displayFixedValue("optionMood", currentAnswer.mood);
+      }
+
       document.getElementById("checkAnswerBtn").textContent = "Check Answer";
     }
     
@@ -1210,6 +1277,44 @@
         container.appendChild(btn);
       });
     }
+
+    /***********************
+     * DISPLAY FIXED FORM VALUES
+     * When playing the fill‑in‑the‑blank version of the game, the correct
+     * morphological categories (person, number, tense, voice, mood) are
+     * displayed directly to the user. This helper updates the heading text
+     * of the option container to include the selected value.
+     ***********************/
+    function displayFixedValue(containerId, value) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      const headerEl = container.querySelector("h3");
+      if (!headerEl) return;
+      // Extract the base label (before any colon) and append the value
+      const parts = headerEl.textContent.split(":");
+      const label = parts[0];
+      headerEl.textContent = label + ": " + value;
+    }
+
+    // Default headings for the answer choice containers. Used to reset the
+    // headers when switching between modes.
+    const defaultHeaders = {
+      optionPerson: "Person",
+      optionNumber: "Number",
+      optionTense: "Tense",
+      optionVoice: "Voice",
+      optionMood: "Mood"
+    };
+
+    function resetOptionHeaders() {
+      for (const id in defaultHeaders) {
+        const container = document.getElementById(id);
+        if (container) {
+          const label = defaultHeaders[id];
+          container.innerHTML = "<h3>" + label + "</h3>";
+        }
+      }
+    }
     
     /***********************
      * ANSWER CHECKING
@@ -1227,54 +1332,104 @@
     
     function checkAnswer() {
       if (!answerRevealed) {
-        const selectedPerson = getSelectedOption("optionPerson");
-        const selectedNumber = getSelectedOption("optionNumber");
-        const selectedTense = getSelectedOption("optionTense");
-        const selectedVoice = getSelectedOption("optionVoice");
-        const selectedMood = getSelectedOption("optionMood");
-        
-        if (!selectedPerson || !selectedNumber || !selectedTense || !selectedVoice || !selectedMood) {
-          alert("Please make a selection in every category.");
-          return;
+        if (!hardMode) {
+          // Easy Mode: check selected morphological categories
+          const selectedPerson = getSelectedOption("optionPerson");
+          const selectedNumber = getSelectedOption("optionNumber");
+          const selectedTense = getSelectedOption("optionTense");
+          const selectedVoice = getSelectedOption("optionVoice");
+          const selectedMood = getSelectedOption("optionMood");
+          if (!selectedPerson || !selectedNumber || !selectedTense || !selectedVoice || !selectedMood) {
+            alert("Please make a selection in every category.");
+            return;
+          }
+          const personOk = isAnswerCorrect(selectedPerson, currentAnswer.person);
+          const numberOk = isAnswerCorrect(selectedNumber, currentAnswer.number);
+          const tenseOk = isAnswerCorrect(selectedTense, currentAnswer.tense);
+          const voiceOk = isAnswerCorrect(selectedVoice, currentAnswer.voice);
+          const moodOk = isAnswerCorrect(selectedMood, currentAnswer.mood);
+          const isCorrect = personOk && numberOk && tenseOk && voiceOk && moodOk;
+          const easyDisplay = "Correct Answer: " +
+            "Person: " + currentAnswer.person + ", " +
+            "Number: " + (currentAnswer.number === "s" ? "Singular" : "Plural") + ", " +
+            "Tense: " + currentAnswer.tense + ", " +
+            "Voice: " + currentAnswer.voice + ", " +
+            "Mood: " + currentAnswer.mood;
+          document.getElementById("correctAnswerDisplay").textContent = easyDisplay;
+          flashFeedback(isCorrect);
+          if (isCorrect) sessionCorrectCount++;
+          updateScoreDisplay();
+          answerRevealed = true;
+          document.getElementById("checkAnswerBtn").textContent = (currentRound < totalRounds) ? "Next Verb" : "Finish";
+          // Record this question for review
+          const record = {
+            mode: "easy",
+            verb: "(" + currentPrincipalParts.join(", ") + ")",
+            categories: {
+              person: currentAnswer.person,
+              number: currentAnswer.number,
+              tense: currentAnswer.tense,
+              voice: currentAnswer.voice,
+              mood: currentAnswer.mood
+            },
+            studentAnswer: {
+              person: selectedPerson,
+              number: selectedNumber,
+              tense: selectedTense,
+              voice: selectedVoice,
+              mood: selectedMood
+            },
+            correctAnswer: {
+              person: currentAnswer.person,
+              number: currentAnswer.number,
+              tense: currentAnswer.tense,
+              voice: currentAnswer.voice,
+              mood: currentAnswer.mood
+            },
+            result: isCorrect ? "Correct" : "Incorrect"
+          };
+          sessionRecords.push(record);
+        } else {
+          // Hard Mode: check the typed form
+          const inputEl = document.getElementById("verbInput");
+          const userInput = inputEl ? inputEl.value.trim() : "";
+          if (!userInput) {
+            alert("Please type the verb form.");
+            return;
+          }
+          const expected = currentAnswer.form;
+          const typed = removeDiacritics(userInput).toLowerCase();
+          const correct = removeDiacritics(expected).toLowerCase();
+          const isCorrect = (typed === correct);
+          const numberLabel = (currentAnswer.number === "s") ? "Singular" : "Plural";
+          const info = "Person: " + currentAnswer.person + ", " +
+                       "Number: " + numberLabel + ", " +
+                       "Tense: " + currentAnswer.tense + ", " +
+                       "Voice: " + currentAnswer.voice + ", " +
+                       "Mood: " + currentAnswer.mood;
+          const feedbackHTML = "Correct form: " + expected + "<br>(" + info + ")";
+          document.getElementById("correctAnswerDisplay").innerHTML = feedbackHTML;
+          flashFeedback(isCorrect);
+          if (isCorrect) sessionCorrectCount++;
+          updateScoreDisplay();
+          answerRevealed = true;
+          document.getElementById("checkAnswerBtn").textContent = (currentRound < totalRounds) ? "Next Verb" : "Finish";
+          const record = {
+            mode: "hard",
+            verb: "(" + currentPrincipalParts.join(", ") + ")",
+            categories: {
+              person: currentAnswer.person,
+              number: currentAnswer.number,
+              tense: currentAnswer.tense,
+              voice: currentAnswer.voice,
+              mood: currentAnswer.mood
+            },
+            studentAnswer: userInput,
+            correctAnswer: expected,
+            result: isCorrect ? "Correct" : "Incorrect"
+          };
+          sessionRecords.push(record);
         }
-        
-        const personOk = isAnswerCorrect(selectedPerson, currentAnswer.person);
-        const numberOk = isAnswerCorrect(selectedNumber, currentAnswer.number);
-        const tenseOk = isAnswerCorrect(selectedTense, currentAnswer.tense);
-        const voiceOk = isAnswerCorrect(selectedVoice, currentAnswer.voice);
-        const moodOk = isAnswerCorrect(selectedMood, currentAnswer.mood);
-        
-        const isCorrect = personOk && numberOk && tenseOk && voiceOk && moodOk;
-        
-        const correctDisplay = "Correct Answer: " +
-          "Person: " + currentAnswer.person + ", " +
-          "Number: " + (currentAnswer.number === "s" ? "Singular" : "Plural") + ", " +
-          "Tense: " + currentAnswer.tense + ", " +
-          "Voice: " + currentAnswer.voice + ", " +
-          "Mood: " + currentAnswer.mood;
-        document.getElementById("correctAnswerDisplay").textContent = correctDisplay;
-        
-        flashFeedback(isCorrect);
-        if (isCorrect) sessionCorrectCount++;
-        updateScoreDisplay();
-        answerRevealed = true;
-        document.getElementById("checkAnswerBtn").textContent = "Next Verb";
-        
-        // Record this question for review.
-        const record = {
-          verb: document.getElementById("verbFormDisplay").textContent + " " +
-                document.getElementById("principalPartsDisplay").textContent,
-          studentAnswer: {
-            person: selectedPerson,
-            number: selectedNumber,
-            tense: selectedTense,
-            voice: selectedVoice,
-            mood: selectedMood
-          },
-          correctAnswer: currentAnswer,
-          result: isCorrect ? "Correct" : "Incorrect"
-        };
-        sessionRecords.push(record);
       } else {
         if (currentRound < totalRounds) {
           nextQuestion();
@@ -1333,18 +1488,29 @@
         tdVerb.textContent = record.verb;
         tr.appendChild(tdVerb);
         const tdStudent = document.createElement("td");
-        tdStudent.textContent = "Person: " + record.studentAnswer.person +
-          ", Number: " + (record.studentAnswer.number === "s" ? "Singular" : "Plural") +
-          ", Tense: " + record.studentAnswer.tense +
-          ", Voice: " + record.studentAnswer.voice +
-          ", Mood: " + record.studentAnswer.mood;
-        tr.appendChild(tdStudent);
         const tdCorrect = document.createElement("td");
-        tdCorrect.textContent = "Person: " + record.correctAnswer.person +
-          ", Number: " + (record.correctAnswer.number === "s" ? "Singular" : "Plural") +
-          ", Tense: " + record.correctAnswer.tense +
-          ", Voice: " + record.correctAnswer.voice +
-          ", Mood: " + record.correctAnswer.mood;
+        if (record.mode === "easy") {
+          tdStudent.textContent = "Person: " + record.studentAnswer.person +
+            ", Number: " + (record.studentAnswer.number === "s" ? "Singular" : "Plural") +
+            ", Tense: " + record.studentAnswer.tense +
+            ", Voice: " + record.studentAnswer.voice +
+            ", Mood: " + record.studentAnswer.mood;
+          tdCorrect.textContent = "Person: " + record.correctAnswer.person +
+            ", Number: " + (record.correctAnswer.number === "s" ? "Singular" : "Plural") +
+            ", Tense: " + record.correctAnswer.tense +
+            ", Voice: " + record.correctAnswer.voice +
+            ", Mood: " + record.correctAnswer.mood;
+        } else {
+          tdStudent.textContent = record.studentAnswer;
+          const numberLabel = (record.categories.number === "s") ? "Singular" : "Plural";
+          const info = "Person: " + record.categories.person +
+            ", Number: " + numberLabel +
+            ", Tense: " + record.categories.tense +
+            ", Voice: " + record.categories.voice +
+            ", Mood: " + record.categories.mood;
+          tdCorrect.textContent = record.correctAnswer + " (" + info + ")";
+        }
+        tr.appendChild(tdStudent);
         tr.appendChild(tdCorrect);
         const tdResult = document.createElement("td");
         tdResult.textContent = record.result;
@@ -1408,6 +1574,8 @@
      * EVENT LISTENERS
      ***********************/
     document.getElementById("startPracticeBtn").addEventListener("click", function() {
+      // Determine if Hard Mode is enabled before starting the session
+      hardMode = document.getElementById("hardModeToggle").checked;
       // Fade-out setup view then show practice view
       const setupView = document.getElementById("setupView");
       setupView.classList.add("fade-out");
@@ -1602,3 +1770,4 @@
   </script>
 </body>
 </html>
+
